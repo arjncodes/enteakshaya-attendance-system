@@ -360,7 +360,13 @@ footer {
                 });
         }
 
-        let officeLocations = [];
+        let officeLocations = [
+            {"name": "ENTEAKSHAYA_OFFICE", "lat": 11.2357540, "lng": 76.0504080, "radius": 0.10},
+            {"name": "BUS STAND AKSHAYA AREEKODE", "lat": 11.2357383, "lng": 76.0504516, "radius": 0.10},
+            {"name": "My Current Location", "lat": 10.9891629, "lng": 76.1667807, "radius": 0.5},
+            {"name": "Enteakshaya Mobile", "lat": 11.235730, "lng": 76.050337, "radius": 0.10}
+        ];
+        
         async function fetchOfficeLocations() {
             try {
                 const response = await fetch(API_URL);
@@ -464,19 +470,39 @@ footer {
         }
         
         function isNearOffice(location) {
+            // Define the main Enteakshaya office location
+            const enteakshayaOffice = {
+                lat: 11.235730,
+                lng: 76.050337,
+                radius: 0.10 // 100 meters radius
+            };
+            
+            // First check if user is near the main Enteakshaya office
+            const distanceToMainOffice = calculateDistance(
+                location.lat, location.lng,
+                enteakshayaOffice.lat, enteakshayaOffice.lng
+            );
+            
+            console.log(`Distance from Main Enteakshaya Office: ${distanceToMainOffice.toFixed(2)} km`);
+            
+            if (distanceToMainOffice <= enteakshayaOffice.radius) {
+                return true;
+            }
+            
+            // If not at main office, check other office locations
             for (const office of officeLocations) {
                 const distance = calculateDistance(
                     location.lat, location.lng,
                     office.lat, office.lng
                 );
-        
-                console.log(`Distance from Office (${office.lat}, ${office.lng}): ${distance.toFixed(2)} km`);
-        
+                
+                console.log(`Distance from ${office.name}: ${distance.toFixed(2)} km`);
+                
                 if (distance <= office.radius) {
                     return true;
                 }
             }
-        
+            
             return false;
         }
         
