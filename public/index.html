@@ -289,6 +289,8 @@ footer {
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
     <script>
+
+        const API_URL="https://vercel.com/arjun-vs-projects/enteakshaya-attendance-system/E4EidRmHyeYBpNhNGfz2TVM7WQD7";
         // DOM Elements
         const startButton = document.getElementById('start-button');
         const stopButton = document.getElementById('stop-button');
@@ -361,7 +363,7 @@ footer {
         let officeLocations = [];
         async function fetchOfficeLocations() {
             try {
-                const response = await fetch('http://localhost:3000/office-locations'); // Adjust API URL if deployed
+                const response = await fetch(API_URL);
                 officeLocations = await response.json();
                 console.log("Fetched Office Locations:", officeLocations);
             } catch (error) {
