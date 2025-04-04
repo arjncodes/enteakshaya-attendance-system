@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Attendance System</title>
+    <style>
+        :root {
+    --primary-color: #4285f4;
+    --secondary-color: #34a853;
+    --error-color: #ea4335;
+    --dark-color: #333;
+    --light-color: #f9f9f9;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--light-color);
+    color: var(--dark-color);
+    line-height: 1.6;
+    padding: 10px;
+}
+
+/* Main container */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+}
+
+/* Header */
+header {
+    margin-bottom: 30px;
+}
+
+h1 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+    font-size: 24px;
+}
+
+/* QR Scanner Box */
+.scanner-container {
+    margin: 20px auto;
+    max-width: 500px;
+    border: 3px solid var(--primary-color);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
+#qr-scanner {
+    width: 100%;
+    height: 350px;
+}
+
+/* Status Messages */
+.status {
+    margin: 20px 0;
+    padding: 15px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.status-success {
+    background-color: rgba(52, 168, 83, 0.2);
+    color: var(--secondary-color);
+}
+
+.status-error {
+    background-color: rgba(234, 67, 53, 0.2);
+    color: var(--error-color);
+}
+
+.status-info {
+    background-color: rgba(66, 133, 244, 0.2);
+    color: var(--primary-color);
+}
+
+/* Details Box */
+.details {
+    margin: 20px 0;
+    text-align: left;
+    padding: 15px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.details p {
+    margin: 10px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.details span {
+    font-weight: bold;
+}
+
+/* Buttons */
+button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin: 10px 5px;
+    transition: background-color 0.3s;
+    width: 100%;
+    max-width: 300px;
+}
+
+button:hover {
+    background-color: #3367d6;
+}
+
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Hide elements */
+.hidden {
+    display: none;
+}
+
+/* Loader */
+.loader {
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid var(--primary-color);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Office Locations */
+.office-locations {
+    margin: 20px 0;
+    font-size: 14px;
+    color: #666;
+}
+
+/* Footer */
+footer {
+    margin-top: 40px;
+    font-size: 14px;
+    color: #666;
+}
+
+/* Scanner animation */
+.scan-line {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: var(--primary-color);
+    animation: scan 2s linear infinite;
+}
+
+@keyframes scan {
+    0% { top: 0; }
+    50% { top: 350px; }
+    100% { top: 0; }
+}
+
+/* RESPONSIVE STYLES */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+
+    h1 {
+        font-size: 22px;
+    }
+
+    .scanner-container {
+        max-width: 100%;
+        height: auto;
+    }
+
+    #qr-scanner {
+        height: 250px;
+    }
+
+    .details {
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    button {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .scan-line {
+        animation: scan 1.5s linear infinite;
+    }
+}
+
+@media (max-width: 480px) {
+    .scanner-container {
+        border-width: 2px;
+    }
+
+    #qr-scanner {
+        height: 220px;
+    }
+
+    h1 {
+        font-size: 20px;
+    }
+
+    .details {
+        font-size: 13px;
+    }
+
+    button {
+        padding: 8px;
+        font-size: 14px;
+    }
+
+    .scan-line {
+        animation: scan 1.2s linear infinite;
+    }
+}
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Employee Attendance System</h1>
+            <p>Scan the QR code to check in or check out</p>
+        </header>
+        
+        <div id="status-message" class="status status-info">Ready to scan. Please allow camera access.</div>
+        
+        <div class="scanner-container">
+            <div id="qr-scanner"></div>
+            <div class="scan-line hidden"></div>
+        </div>
+        
+        <div>
+            <button id="start-button">Start Scanner</button>
+            <button id="stop-button" disabled>Stop Scanner</button>
+        </div>
+        
+        <div id="employee-details" class="details hidden">
+            <h2>Employee Details</h2>
+            <div id="loader" class="loader hidden"></div>
+            <div id="details-content">
+                <p>Employee ID: <span id="employee-id">-</span></p>
+                <p>Name: <span id="employee-name">-</span></p>
+                <p>Department: <span id="employee-department">-</span></p>
+                <p>Status: <span id="attendance-status">-</span></p>
+                <p>Time: <span id="attendance-time">-</span></p>
+            </div>
+        </div>
+        <p>Your Location: <span id="location"></span></p>
+        <button onclick="getCurrentLocation()">Get Location</button>
+
+        <!-- <div class="office-locations">
+            <h3>Office Locations</h3>
+            <p>Main Office: 40.7128° N, 74.0060° W (New York)</p>
+            <p>Branch Office: 37.7749° N, 122.4194° W (San Francisco)</p>
+            <p>Remote Office: 51.5074° N, 0.1278° W (London)</p>
+        </div> -->
+        
+        <footer>
+            <p>© 2025 Employee Attendance System | Enteakshaya </p>
+        </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
+    <script>
+        // DOM Elements
+        const startButton = document.getElementById('start-button');
+        const stopButton = document.getElementById('stop-button');
+        const statusMessage = document.getElementById('status-message');
+        const employeeDetails = document.getElementById('employee-details');
+        const employeeId = document.getElementById('employee-id');
+        const employeeName = document.getElementById('employee-name');
+        const employeeDepartment = document.getElementById('employee-department');
+        const attendanceStatus = document.getElementById('attendance-status');
+        const attendanceTime = document.getElementById('attendance-time');
+        const loader = document.getElementById('loader');
+        const scanLine = document.querySelector('.scan-line');
+        
+        // Global variables
+        let html5QrCode;
+        let scanning = false;
+        let lastScannedCode = '';
+        let scanCooldown = false;
+        
+        // Initialize QR scanner
+        function initQRScanner() {
+            html5QrCode = new Html5Qrcode("qr-scanner");
+        }
+        
+        // Start QR scanning
+        startButton.addEventListener('click', startScanner);
+        stopButton.addEventListener('click', stopScanner);
+        
+        function startScanner() {
+            if (scanning) return;
+            
+            updateStatus("Starting scanner...", "info");
+            
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onScanSuccess,
+                onScanError
+            )
+            .then(() => {
+                scanning = true;
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                updateStatus("Scanner active. Please scan a QR code.", "info");
+                scanLine.classList.remove('hidden');
+            })
+            .catch((err) => {
+                updateStatus("Error starting scanner: " + err, "error");
+            });
+        }
+        
+        function stopScanner() {
+            if (!scanning) return;
+            
+            html5QrCode.stop()
+                .then(() => {
+                    scanning = false;
+                    startButton.disabled = false;
+                    stopButton.disabled = true;
+                    updateStatus("Scanner stopped.", "info");
+                    scanLine.classList.add('hidden');
+                })
+                .catch((err) => {
+                    updateStatus("Error stopping scanner: " + err, "error");
+                });
+        }
+
+        let officeLocations = [];
+        async function fetchOfficeLocations() {
+            try {
+                const response = await fetch('http://localhost:3000/office-locations'); // Adjust API URL if deployed
+                officeLocations = await response.json();
+                console.log("Fetched Office Locations:", officeLocations);
+            } catch (error) {
+                console.error("Error fetching office locations:", error);
+            }
+        }
+        // Call this function when the page loads
+        window.addEventListener('load', fetchOfficeLocations);
+
+        
+        // QR code callbacks
+        function onScanSuccess(decodedText, decodedResult) {
+            if (scanCooldown) return;
+        
+            // Set cooldown to prevent multiple rapid scans
+            scanCooldown = true;
+            setTimeout(() => { scanCooldown = false; }, 3000);
+        
+            // Stop scanner immediately after scanning
+            stopScanner();
+        
+            // Process the scanned QR code
+            processQRCode(decodedText);
+        
+            // Show success message instead of redirecting
+            const messageBox = document.getElementById("success-message");
+            if (messageBox) {
+                messageBox.innerHTML = "✅ Attendance recorded successfully!";
+                messageBox.style.display = "block";
+            }
+        
+            // Automatically clear the message after 15 seconds
+            setTimeout(() => {
+                if (messageBox) {
+                    messageBox.style.display = "none";
+                }
+            }, 15000);
+        }
+        
+        function onScanError(error) {
+            // QR Code scanning is continuing, do nothing here.
+            console.log(error);
+        }
+        
+        function processQRCode(qrData) {
+            try {
+                // Assuming QR code contains employee ID
+                const employeeId = qrData.trim();
+        
+                if (employeeId === lastScannedCode) {
+                    updateStatus("This QR code was just scanned. Please wait.", "info");
+                    return;
+                }
+        
+                lastScannedCode = employeeId;
+                updateStatus("QR Code detected: " + employeeId + ". Verifying location...", "info");
+        
+                // Check location
+                checkLocation()
+                    .then(locationData => {
+                        console.log("Current Location:", locationData); // Log current location
+        
+                        if (isNearOffice(locationData)) {
+                            // Get employee data and mark attendance
+                            showLoader();
+                            markAttendance(employeeId, locationData);
+                        } else {
+                            updateStatus("You are not at an approved office location. Attendance rejected.", "error");
+                        }
+                    })
+                    .catch(error => {
+                        updateStatus("Location error: " + error.message + ". Please enable location services.", "error");
+                    });
+            } catch (error) {
+                updateStatus("Invalid QR code: " + error.message, "error");
+            }
+        }
+        
+        function checkLocation() {
+            return new Promise((resolve, reject) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        position => {
+                            const locationData = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            resolve(locationData);
+                        },
+                        error => {
+                            reject(new Error("Unable to retrieve your location"));
+                        }
+                    );
+                } else {
+                    reject(new Error("Geolocation not supported by this browser"));
+                }
+            });
+        }
+        
+        function isNearOffice(location) {
+            for (const office of officeLocations) {
+                const distance = calculateDistance(
+                    location.lat, location.lng,
+                    office.lat, office.lng
+                );
+        
+                console.log(`Distance from Office (${office.lat}, ${office.lng}): ${distance.toFixed(2)} km`);
+        
+                if (distance <= office.radius) {
+                    return true;
+                }
+            }
+        
+            return false;
+        }
+        
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            // Haversine formula to calculate distance between two coordinates in km
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            const distance = R * c; // Distance in km
+            return distance;
+        }
+        
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+        
+        
+        function markAttendance(employeeId, locationData) {
+            // First check if this is a check-in or check-out
+            fetch(`${API_URL}/check-status?employeeId=${employeeId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.checkedIn && !data.checkedOut) {
+                            // This is a check-out
+                            recordAttendance(employeeId, 'checkout', locationData);
+                        } else {
+                            // This is a check-in
+                            recordAttendance(employeeId, 'checkin', locationData);
+                        }
+                    } else {
+                        updateStatus("Error checking status: " + data.message, "error");
+                        hideLoader();
+                    }
+                })
+                .catch(error => {
+                    updateStatus("Server error: " + error.message, "error");
+                    hideLoader();
+                });
+        }
+        
+        function recordAttendance(employeeId, action, locationData) {
+            const data = {
+                employeeId: employeeId,
+                action: action,
+                location: {
+                    lat: locationData.lat,
+                    lng: locationData.lng,
+                    officeName: getNearestOffice(locationData)
+                },
+                timestamp: new Date().toISOString()
+            };
+            
+            fetch(`${API_URL}/record-attendance`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Display employee details
+                    displayEmployeeDetails(data.employee, data.attendanceRecord);
+                    
+                    const actionText = action === 'checkin' ? 'Check-In' : 'Check-Out';
+                    let statusText = `${actionText} successful at ${formatTime(data.attendanceRecord.timestamp)}`;
+                    
+                    if (action === 'checkout' && data.attendanceRecord.hoursWorked) {
+                        statusText += `. Hours worked: ${data.attendanceRecord.hoursWorked}`;
+                    }
+                    
+                    updateStatus(statusText, "success");
+        
+                    // **Auto-clear the screen after 10 seconds**
+                    setTimeout(() => {
+                        document.getElementById("employee-details").innerHTML = ""; // Clear employee details
+                        document.getElementById("scanner-container").style.display = "block"; // Show scanner again
+                    }, 10000);
+                } else {
+                    updateStatus("Error: " + data.message, "error");
+                }
+                
+                hideLoader();
+            })
+            .catch(error => {
+                updateStatus("Server error: " + error.message, "error");
+                hideLoader();
+            });
+        }
+        
+        function getNearestOffice(location) {
+            let nearestOffice = officeLocations[0];
+            let shortestDistance = calculateDistance(
+                location.lat, location.lng,
+                nearestOffice.lat, nearestOffice.lng
+            );
+            
+            for (let i = 1; i < officeLocations.length; i++) {
+                const office = officeLocations[i];
+                const distance = calculateDistance(
+                    location.lat, location.lng,
+                    office.lat, office.lng
+                );
+                
+                if (distance < shortestDistance) {
+                    nearestOffice = office;
+                    shortestDistance = distance;
+                }
+            }
+            
+            return nearestOffice.name;
+        }
+        
+        function displayEmployeeDetails(employee, attendanceRecord) {
+            employeeId.textContent = employee.id;
+            employeeName.textContent = employee.name;
+            employeeDepartment.textContent = employee.department;
+            
+            const isCheckIn = !attendanceRecord.checkOutTime;
+            attendanceStatus.textContent = isCheckIn ? "Checked In" : "Checked Out";
+            
+            const timeToShow = isCheckIn 
+                ? formatTime(attendanceRecord.checkInTime) 
+                : formatTime(attendanceRecord.checkOutTime);
+            
+            attendanceTime.textContent = timeToShow;
+            
+            employeeDetails.classList.remove('hidden');
+        }
+        
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString();
+        }
+        
+        function updateStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = "status status-" + type;
+        }
+        
+        function showLoader() {
+            loader.classList.remove('hidden');
+        }
+        
+        function hideLoader() {
+            loader.classList.add('hidden');
+        }
+
+        function getCurrentLocation() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        document.getElementById("location").textContent = `Lat: ${lat}, Lng: ${lng}`;
+                    },
+                    (error) => {
+                        document.getElementById("location").textContent = "⚠️ Location access denied.";
+                    }
+                );
+            } else {
+                document.getElementById("location").textContent = "⚠️ Geolocation not supported.";
+            }
+        }
+
+        
+        // Initialize when the page loads
+        window.addEventListener('load', initQRScanner);
+    </script>
+</body>
+</html>
