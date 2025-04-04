@@ -289,8 +289,6 @@ footer {
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.4/html5-qrcode.min.js"></script>
     <script>
-
-        const API_URL="https://vercel.com/arjun-vs-projects/enteakshaya-attendance-system/E4EidRmHyeYBpNhNGfz2TVM7WQD7";
         // DOM Elements
         const startButton = document.getElementById('start-button');
         const stopButton = document.getElementById('stop-button');
@@ -303,28 +301,55 @@ footer {
         const attendanceTime = document.getElementById('attendance-time');
         const loader = document.getElementById('loader');
         const scanLine = document.querySelector('.scan-line');
-        
+        const debugElement = document.getElementById('debug-location');
+
+        // API URL - Make sure this is your correct endpoint
+        const API_URL = "https://vercel.com/arjun-vs-projects/enteakshaya-attendance-system";
+
         // Global variables
         let html5QrCode;
         let scanning = false;
         let lastScannedCode = '';
         let scanCooldown = false;
-        
+        let officeLocations = [];
+        let currentLocation = null;
+
+        // Debug mode - set to true to see location information on screen
+        const DEBUG_MODE = true;
+
+        // Location accuracy settings
+        const DEFAULT_RADIUS_KM = 0.5; // 500 meters default radius if not specified
+        const MAX_LOCATION_AGE = 10000; // 10 seconds maximum age for location
+
         // Initialize QR scanner
         function initQRScanner() {
-            html5QrCode = new Html5Qrcode("qr-scanner");
+            if (typeof Html5Qrcode !== 'undefined') {
+                html5QrCode = new Html5Qrcode("qr-scanner");
+                console.log("QR scanner initialized");
+            } else {
+                console.error("Html5Qrcode library not loaded");
+                updateStatus("Scanner library not loaded. Please refresh the page.", "error");
+            }
+            
+            // Initialize other components
+            fetchOfficeLocations();
+            setupLocationUpdates();
         }
-        
+
         // Start QR scanning
         startButton.addEventListener('click', startScanner);
         stopButton.addEventListener('click', stopScanner);
-        
+
         function startScanner() {
             if (scanning) return;
             
             updateStatus("Starting scanner...", "info");
             
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
             
             html5QrCode.start(
                 { facingMode: "environment" },
@@ -341,9 +366,10 @@ footer {
             })
             .catch((err) => {
                 updateStatus("Error starting scanner: " + err, "error");
+                console.error("Scanner error:", err);
             });
         }
-        
+
         function stopScanner() {
             if (!scanning) return;
             
@@ -357,178 +383,381 @@ footer {
                 })
                 .catch((err) => {
                     updateStatus("Error stopping scanner: " + err, "error");
+                    console.error("Stop scanner error:", err);
                 });
         }
 
-        let officeLocations = [
-            {"name": "ENTEAKSHAYA_OFFICE", "lat": 11.2357540, "lng": 76.0504080, "radius": 0.10},
-            {"name": "BUS STAND AKSHAYA AREEKODE", "lat": 11.2357383, "lng": 76.0504516, "radius": 0.10},
-            {"name": "My Current Location", "lat": 10.9891629, "lng": 76.1667807, "radius": 0.5},
-            {"name": "Enteakshaya Mobile", "lat": 11.235730, "lng": 76.050337, "radius": 0.10}
-        ];
-        
+        // Fetch office locations from API
         async function fetchOfficeLocations() {
             try {
-                const response = await fetch(API_URL);
-                officeLocations = await response.json();
-                console.log("Fetched Office Locations:", officeLocations);
+                updateStatus("Fetching office locations...", "info");
+                
+                // Check if API_URL is valid
+                if (!API_URL || API_URL.includes("vercel.com/arjun-vs-projects")) {
+                    console.warn("Using fallback office locations as API URL may be incorrect");
+                    // Fallback hardcoded office locations if API doesn't work
+                    officeLocations = [
+                        { name: "Main Office", lat: 10.5276, lng: 76.2144, radius: 0.5 },
+                        { name: "Branch Office", lat: 10.5100, lng: 76.2200, radius: 0.5 }
+                    ];
+                    
+                    if (DEBUG_MODE) {
+                        showDebugInfo("Using fallback office locations");
+                    }
+                    return;
+                }
+                
+                const response = await fetch(`${API_URL}/office-locations`);
+                if (!response.ok) {
+                    throw new Error(`API returned status ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (Array.isArray(data)) {
+                    officeLocations = data.map(office => ({
+                        ...office,
+                        radius: office.radius || DEFAULT_RADIUS_KM // Use default radius if not specified
+                    }));
+                    console.log("Fetched Office Locations:", officeLocations);
+                } else {
+                    throw new Error("Invalid office location data format");
+                }
             } catch (error) {
                 console.error("Error fetching office locations:", error);
+                updateStatus("Error loading office locations. Using defaults.", "warning");
+                
+                // Use fallback office locations
+                officeLocations = [
+                    { name: "Main Office", lat: 10.5276, lng: 76.2144, radius: 0.5 },
+                    { name: "Branch Office", lat: 10.5100, lng: 76.2200, radius: 0.5 }
+                ];
             }
         }
-        // Call this function when the page loads
-        window.addEventListener('load', fetchOfficeLocations);
 
-        
+        // Set up continuous location updates
+        function setupLocationUpdates() {
+            if (navigator.geolocation) {
+                // Request high accuracy location
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: MAX_LOCATION_AGE
+                };
+                
+                // Watch position for continuous updates
+                navigator.geolocation.watchPosition(
+                    updateCurrentLocation,
+                    handleLocationError,
+                    options
+                );
+                
+                // Also get a single position update immediately
+                navigator.geolocation.getCurrentPosition(
+                    updateCurrentLocation,
+                    handleLocationError,
+                    options
+                );
+            } else {
+                updateStatus("Geolocation not supported by this browser", "error");
+            }
+        }
+
+        function updateCurrentLocation(position) {
+            currentLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp
+            };
+            
+            if (DEBUG_MODE) {
+                const nearestOffice = findNearestOffice(currentLocation);
+                const distance = nearestOffice ? 
+                    calculateDistance(currentLocation.lat, currentLocation.lng, nearestOffice.lat, nearestOffice.lng) : 
+                    "unknown";
+                
+                showDebugInfo(`
+                    Current location: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}
+                    Accuracy: ±${(currentLocation.accuracy / 1000).toFixed(2)}km
+                    Nearest office: ${nearestOffice ? nearestOffice.name : "None"}
+                    Distance: ${typeof distance === 'number' ? distance.toFixed(3) + 'km' : distance}
+                    Within range: ${nearestOffice && distance <= nearestOffice.radius ? 'Yes' : 'No'}
+                `);
+            }
+        }
+
+        function handleLocationError(error) {
+            let errorMessage;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Location access denied. Please enable location services.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Location information unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Location request timed out.";
+                    break;
+                default:
+                    errorMessage = "Unknown location error occurred.";
+            }
+            
+            console.error("Geolocation error:", error);
+            updateStatus(errorMessage, "error");
+            
+            if (DEBUG_MODE) {
+                showDebugInfo(`Location error: ${errorMessage}`);
+            }
+        }
+
+        function showDebugInfo(message) {
+            if (debugElement) {
+                debugElement.textContent = message;
+                debugElement.style.display = 'block';
+            } else {
+                console.log("Debug info:", message);
+            }
+        }
+
         // QR code callbacks
         function onScanSuccess(decodedText, decodedResult) {
             if (scanCooldown) return;
-        
+
             // Set cooldown to prevent multiple rapid scans
             scanCooldown = true;
             setTimeout(() => { scanCooldown = false; }, 3000);
-        
+
             // Stop scanner immediately after scanning
             stopScanner();
-        
+
             // Process the scanned QR code
             processQRCode(decodedText);
-        
-            // Show success message instead of redirecting
+
+            // Show success message
             const messageBox = document.getElementById("success-message");
             if (messageBox) {
-                messageBox.innerHTML = "✅ Attendance recorded successfully!";
+                messageBox.innerHTML = "✓ QR code scanned! Verifying...";
                 messageBox.style.display = "block";
             }
-        
-            // Automatically clear the message after 15 seconds
-            setTimeout(() => {
-                if (messageBox) {
-                    messageBox.style.display = "none";
-                }
-            }, 15000);
         }
-        
+
         function onScanError(error) {
             // QR Code scanning is continuing, do nothing here.
-            console.log(error);
+            console.log("Scan error:", error);
         }
-        
+
         function processQRCode(qrData) {
             try {
                 // Assuming QR code contains employee ID
                 const employeeId = qrData.trim();
-        
+
                 if (employeeId === lastScannedCode) {
                     updateStatus("This QR code was just scanned. Please wait.", "info");
                     return;
                 }
-        
+
                 lastScannedCode = employeeId;
                 updateStatus("QR Code detected: " + employeeId + ". Verifying location...", "info");
-        
-                // Check location
-                checkLocation()
-                    .then(locationData => {
-                        console.log("Current Location:", locationData); // Log current location
-        
-                        if (isNearOffice(locationData)) {
-                            // Get employee data and mark attendance
-                            showLoader();
-                            markAttendance(employeeId, locationData);
-                        } else {
-                            updateStatus("You are not at an approved office location. Attendance rejected.", "error");
-                        }
-                    })
-                    .catch(error => {
-                        updateStatus("Location error: " + error.message + ". Please enable location services.", "error");
-                    });
+
+                // Check if we already have location data
+                if (currentLocation) {
+                    processAttendanceWithLocation(employeeId, currentLocation);
+                } else {
+                    // Get fresh location data if needed
+                    checkLocation()
+                        .then(locationData => {
+                            processAttendanceWithLocation(employeeId, locationData);
+                        })
+                        .catch(error => {
+                            updateStatus("Location error: " + error.message + ". Please enable location services.", "error");
+                        });
+                }
             } catch (error) {
                 updateStatus("Invalid QR code: " + error.message, "error");
+                console.error("QR processing error:", error);
             }
         }
-        
+
+        function processAttendanceWithLocation(employeeId, locationData) {
+            console.log("Processing with location:", locationData);
+            
+            if (isNearOffice(locationData)) {
+                // Get employee data and mark attendance
+                showLoader();
+                markAttendance(employeeId, locationData);
+                
+                // Show success message
+                const messageBox = document.getElementById("success-message");
+                if (messageBox) {
+                    messageBox.innerHTML = "✅ Location verified!";
+                    messageBox.style.display = "block";
+                }
+            } else {
+                updateStatus("You are not at an approved office location. Attendance rejected.", "error");
+                
+                if (DEBUG_MODE) {
+                    // Show nearest office and distance for debugging
+                    const nearestOffice = findNearestOffice(locationData);
+                    if (nearestOffice) {
+                        const distance = calculateDistance(
+                            locationData.lat, locationData.lng,
+                            nearestOffice.lat, nearestOffice.lng
+                        );
+                        
+                        showDebugInfo(`
+                            Not at approved location.
+                            Current: ${locationData.lat.toFixed(6)}, ${locationData.lng.toFixed(6)}
+                            Nearest office: ${nearestOffice.name} 
+                            (${nearestOffice.lat.toFixed(6)}, ${nearestOffice.lng.toFixed(6)})
+                            Distance: ${distance.toFixed(3)}km
+                            Allowed radius: ${nearestOffice.radius}km
+                        `);
+                    }
+                }
+                
+                // Show failure message
+                const messageBox = document.getElementById("success-message");
+                if (messageBox) {
+                    messageBox.innerHTML = "❌ Location verification failed!";
+                    messageBox.style.display = "block";
+                    
+                    // Hide the message after 5 seconds
+                    setTimeout(() => {
+                        messageBox.style.display = "none";
+                        initQRScanner(); // Restart scanner
+                    }, 5000);
+                }
+            }
+        }
+
         function checkLocation() {
             return new Promise((resolve, reject) => {
                 if (navigator.geolocation) {
+                    const options = {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: MAX_LOCATION_AGE
+                    };
+                    
                     navigator.geolocation.getCurrentPosition(
                         position => {
                             const locationData = {
                                 lat: position.coords.latitude,
-                                lng: position.coords.longitude
+                                lng: position.coords.longitude,
+                                accuracy: position.coords.accuracy,
+                                timestamp: position.timestamp
                             };
+                            
+                            // Store this as current location
+                            currentLocation = locationData;
                             resolve(locationData);
                         },
                         error => {
-                            reject(new Error("Unable to retrieve your location"));
-                        }
+                            reject(new Error("Unable to retrieve your location: " + error.message));
+                        },
+                        options
                     );
                 } else {
                     reject(new Error("Geolocation not supported by this browser"));
                 }
             });
         }
-        
+
         function isNearOffice(location) {
-            // Define the main Enteakshaya office location
-            const enteakshayaOffice = {
-                lat: 11.235730,
-                lng: 76.050337,
-                radius: 0.10 // 100 meters radius
-            };
-            
-            // First check if user is near the main Enteakshaya office
-            const distanceToMainOffice = calculateDistance(
-                location.lat, location.lng,
-                enteakshayaOffice.lat, enteakshayaOffice.lng
-            );
-            
-            console.log(`Distance from Main Enteakshaya Office: ${distanceToMainOffice.toFixed(2)} km`);
-            
-            if (distanceToMainOffice <= enteakshayaOffice.radius) {
+            // No office locations defined
+            if (!officeLocations || officeLocations.length === 0) {
+                console.warn("No office locations defined, allowing all locations");
                 return true;
             }
             
-            // If not at main office, check other office locations
+            // Simple validation for location data
+            if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+                console.error("Invalid location data:", location);
+                return false;
+            }
+            
             for (const office of officeLocations) {
+                // Validate office data
+                if (!office || typeof office.lat !== 'number' || typeof office.lng !== 'number') {
+                    console.error("Invalid office data:", office);
+                    continue;
+                }
+                
                 const distance = calculateDistance(
                     location.lat, location.lng,
                     office.lat, office.lng
                 );
                 
-                console.log(`Distance from ${office.name}: ${distance.toFixed(2)} km`);
+                const radius = office.radius || DEFAULT_RADIUS_KM;
+                console.log(`Distance from ${office.name}: ${distance.toFixed(3)} km (Allowed radius: ${radius} km)`);
                 
-                if (distance <= office.radius) {
+                if (distance <= radius) {
                     return true;
                 }
             }
             
             return false;
         }
-        
+
+        function findNearestOffice(location) {
+            if (!officeLocations || officeLocations.length === 0) {
+                return null;
+            }
+            
+            let nearestOffice = null;
+            let shortestDistance = Infinity;
+            
+            for (const office of officeLocations) {
+                const distance = calculateDistance(
+                    location.lat, location.lng,
+                    office.lat, office.lng
+                );
+                
+                if (distance < shortestDistance) {
+                    nearestOffice = office;
+                    shortestDistance = distance;
+                }
+            }
+            
+            return nearestOffice;
+        }
+
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            // Haversine formula to calculate distance between two coordinates in km
-            const R = 6371; // Radius of the earth in km
+            // Improved Haversine formula with validation
+            if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || 
+                typeof lat2 !== 'number' || typeof lon2 !== 'number') {
+                console.error("Invalid coordinates for distance calculation", { lat1, lon1, lat2, lon2 });
+                return Infinity;
+            }
+            
+            // Earth radius in kilometers
+            const R = 6371;
+            
+            // Convert coordinates from degrees to radians
             const dLat = deg2rad(lat2 - lat1);
             const dLon = deg2rad(lon2 - lon1);
+            
+            // Haversine formula
             const a = 
                 Math.sin(dLat/2) * Math.sin(dLat/2) +
                 Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2); 
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            const distance = R * c; // Distance in km
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c; // Distance in kilometers
+            
             return distance;
         }
-        
+
         function deg2rad(deg) {
-            return deg * (Math.PI/180);
+            return deg * (Math.PI / 180);
         }
-        
-        
+
         function markAttendance(employeeId, locationData) {
             // First check if this is a check-in or check-out
             fetch(`${API_URL}/check-status?employeeId=${employeeId}`)
-                .then(response => response.json())
+                .then(handleResponse)
                 .then(data => {
                     if (data.success) {
                         if (data.checkedIn && !data.checkedOut) {
@@ -546,17 +775,27 @@ footer {
                 .catch(error => {
                     updateStatus("Server error: " + error.message, "error");
                     hideLoader();
+                    console.error("Status check error:", error);
                 });
         }
-        
+
+        function handleResponse(response) {
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        }
+
         function recordAttendance(employeeId, action, locationData) {
+            const nearestOffice = findNearestOffice(locationData);
+            
             const data = {
                 employeeId: employeeId,
                 action: action,
                 location: {
                     lat: locationData.lat,
                     lng: locationData.lng,
-                    officeName: getNearestOffice(locationData)
+                    officeName: nearestOffice ? nearestOffice.name : "Unknown"
                 },
                 timestamp: new Date().toISOString()
             };
@@ -568,7 +807,7 @@ footer {
                 },
                 body: JSON.stringify(data)
             })
-            .then(response => response.json())
+            .then(handleResponse)
             .then(data => {
                 if (data.success) {
                     // Display employee details
@@ -582,11 +821,30 @@ footer {
                     }
                     
                     updateStatus(statusText, "success");
-        
-                    // **Auto-clear the screen after 10 seconds**
+                    
+                    // Success message
+                    const messageBox = document.getElementById("success-message");
+                    if (messageBox) {
+                        messageBox.innerHTML = "✅ Attendance recorded successfully!";
+                        messageBox.style.display = "block";
+                    }
+
+                    // Auto-clear the screen after 10 seconds
                     setTimeout(() => {
-                        document.getElementById("employee-details").innerHTML = ""; // Clear employee details
-                        document.getElementById("scanner-container").style.display = "block"; // Show scanner again
+                        if (document.getElementById("employee-details")) {
+                            document.getElementById("employee-details").innerHTML = ""; // Clear employee details
+                        }
+                        
+                        if (document.getElementById("scanner-container")) {
+                            document.getElementById("scanner-container").style.display = "block"; // Show scanner again
+                        }
+                        
+                        if (messageBox) {
+                            messageBox.style.display = "none";
+                        }
+                        
+                        // Restart scanner
+                        startScanner();
                     }, 10000);
                 } else {
                     updateStatus("Error: " + data.message, "error");
@@ -597,36 +855,19 @@ footer {
             .catch(error => {
                 updateStatus("Server error: " + error.message, "error");
                 hideLoader();
+                console.error("Record attendance error:", error);
             });
         }
-        
-        function getNearestOffice(location) {
-            let nearestOffice = officeLocations[0];
-            let shortestDistance = calculateDistance(
-                location.lat, location.lng,
-                nearestOffice.lat, nearestOffice.lng
-            );
-            
-            for (let i = 1; i < officeLocations.length; i++) {
-                const office = officeLocations[i];
-                const distance = calculateDistance(
-                    location.lat, location.lng,
-                    office.lat, office.lng
-                );
-                
-                if (distance < shortestDistance) {
-                    nearestOffice = office;
-                    shortestDistance = distance;
-                }
+
+        function displayEmployeeDetails(employee, attendanceRecord) {
+            if (!employee || !attendanceRecord) {
+                console.error("Invalid employee or attendance data");
+                return;
             }
             
-            return nearestOffice.name;
-        }
-        
-        function displayEmployeeDetails(employee, attendanceRecord) {
-            employeeId.textContent = employee.id;
-            employeeName.textContent = employee.name;
-            employeeDepartment.textContent = employee.department;
+            employeeId.textContent = employee.id || "N/A";
+            employeeName.textContent = employee.name || "N/A";
+            employeeDepartment.textContent = employee.department || "N/A";
             
             const isCheckIn = !attendanceRecord.checkOutTime;
             attendanceStatus.textContent = isCheckIn ? "Checked In" : "Checked Out";
@@ -639,45 +880,82 @@ footer {
             
             employeeDetails.classList.remove('hidden');
         }
-        
-        function formatTime(isoString) {
-            const date = new Date(isoString);
-            return date.toLocaleTimeString();
-        }
-        
-        function updateStatus(message, type) {
-            statusMessage.textContent = message;
-            statusMessage.className = "status status-" + type;
-        }
-        
-        function showLoader() {
-            loader.classList.remove('hidden');
-        }
-        
-        function hideLoader() {
-            loader.classList.add('hidden');
-        }
 
-        function getCurrentLocation() {
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        document.getElementById("location").textContent = `Lat: ${lat}, Lng: ${lng}`;
-                    },
-                    (error) => {
-                        document.getElementById("location").textContent = "⚠️ Location access denied.";
-                    }
-                );
-            } else {
-                document.getElementById("location").textContent = "⚠️ Geolocation not supported.";
+        function formatTime(isoString) {
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleTimeString();
+            } catch (error) {
+                console.error("Invalid time format:", error);
+                return "Invalid time";
             }
         }
 
-        
+        function updateStatus(message, type) {
+            if (statusMessage) {
+                statusMessage.textContent = message;
+                statusMessage.className = "status status-" + type;
+            }
+            console.log(`Status [${type}]:`, message);
+        }
+
+        function showLoader() {
+            if (loader) {
+                loader.classList.remove('hidden');
+            }
+        }
+
+        function hideLoader() {
+            if (loader) {
+                loader.classList.add('hidden');
+            }
+        }
+
+        // Get current location for debugging
+        function showCurrentLocation() {
+            if (currentLocation) {
+                const nearestOffice = findNearestOffice(currentLocation);
+                const distance = nearestOffice ? 
+                    calculateDistance(currentLocation.lat, currentLocation.lng, nearestOffice.lat, nearestOffice.lng) : 
+                    "unknown";
+                
+                updateStatus(`
+                    Current Location: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}
+                    Nearest Office: ${nearestOffice ? nearestOffice.name : "None"} 
+                    Distance: ${typeof distance === 'number' ? distance.toFixed(3) + 'km' : distance}
+                `, "info");
+            } else {
+                checkLocation()
+                    .then(location => {
+                        updateStatus(`Location: ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`, "info");
+                    })
+                    .catch(error => {
+                        updateStatus("Error getting location: " + error.message, "error");
+                    });
+            }
+        }
+
         // Initialize when the page loads
-        window.addEventListener('load', initQRScanner);
+        window.addEventListener('load', () => {
+            setTimeout(initQRScanner, 500); // Slight delay to ensure DOM is ready
+            
+            // Add debug button if in debug mode
+            if (DEBUG_MODE) {
+                const debugButton = document.createElement('button');
+                debugButton.textContent = "Debug Location";
+                debugButton.className = "debug-button";
+                debugButton.onclick = showCurrentLocation;
+                document.body.appendChild(debugButton);
+                
+                // Create debug element if it doesn't exist
+                if (!document.getElementById('debug-location')) {
+                    const debugDiv = document.createElement('div');
+                    debugDiv.id = 'debug-location';
+                    debugDiv.className = 'debug-info';
+                    document.body.appendChild(debugDiv);
+                }
+            }
+        }); 
     </script>
 </body>
 </html>
